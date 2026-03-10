@@ -1,0 +1,48 @@
+[package]
+name = "aelf-sdk"
+description = "AElf Rust SDK facade crate."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+aelf-client = { path = "../aelf-client", version = "=0.1.0-alpha.0" }
+aelf-contract = { path = "../aelf-contract", version = "=0.1.0-alpha.0" }
+aelf-crypto = { path = "../aelf-crypto", version = "=0.1.0-alpha.0" }
+aelf-keystore = { path = "../aelf-keystore", version = "=0.1.0-alpha.0" }
+aelf-proto = { path = "../aelf-proto", version = "=0.1.0-alpha.0" }
+
+[dev-dependencies]
+hex.workspace = true
+prost.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
+[[example]]
+name = "basic_client"
+path = "examples/basic_client.rs"
+
+[[example]]
+name = "wallet_keystore_roundtrip"
+path = "examples/wallet_keystore_roundtrip.rs"
+
+[[example]]
+name = "token_transfer"
+path = "examples/token_transfer.rs"
+
+[[example]]
+name = "dynamic_contract_get_balance"
+path = "examples/dynamic_contract_get_balance.rs"
+
+[[example]]
+name = "public_balance"
+path = "examples/public_balance.rs"
+
+[[example]]
+name = "raw_transaction_flow"
+path = "examples/raw_transaction_flow.rs"
+
+[lints]
+workspace = true

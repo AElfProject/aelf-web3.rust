@@ -1,0 +1,26 @@
+[package]
+name = "aelf-contract"
+description = "Typed and dynamic contract bindings for AElf Rust SDK."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+aelf-client = { path = "../aelf-client", version = "=0.1.0-alpha.0" }
+aelf-crypto = { path = "../aelf-crypto", version = "=0.1.0-alpha.0" }
+aelf-proto = { path = "../aelf-proto", version = "=0.1.0-alpha.0" }
+bytes.workspace = true
+hex.workspace = true
+lru.workspace = true
+pbjson-types.workspace = true
+prost.workspace = true
+prost-reflect.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true
