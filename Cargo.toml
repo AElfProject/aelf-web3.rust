@@ -39,6 +39,7 @@ prost = "0.14.3"
 prost-build = "0.14.3"
 prost-reflect = { version = "0.16.3", features = ["serde"] }
 prost-types = "0.14.3"
+protoc-bin-vendored = "3.2.0"
 rand = "0.9.2"
 reqwest = { version = "0.13.2", default-features = false, features = ["json", "query", "rustls", "http2"] }
 salsa20 = "0.10.2"

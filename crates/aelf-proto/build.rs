@@ -5,6 +5,8 @@ use std::path::PathBuf;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let proto_root = manifest_dir.join("proto/upstream");
+    let protoc = protoc_bin_vendored::protoc_bin_path()?;
+    let protoc_include = protoc_bin_vendored::include_path()?;
     let mut files = collect_proto_files(&proto_root)?;
     files.sort();
 
@@ -20,7 +22,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     config.compile_well_known_types();
     config.extern_path(".google.protobuf", "::pbjson_types");
     config.include_file("_includes.rs");
-    config.compile_protos(&files, &[proto_root])?;
+    config.protoc_executable(protoc);
+    config.compile_protos(&files, &[proto_root, protoc_include])?;
 
     let descriptor_bytes = fs::read(&descriptor_path)?;
     let packages = collect_packages(&descriptor_bytes)?;
