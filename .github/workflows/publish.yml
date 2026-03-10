@@ -83,7 +83,15 @@ jobs:
           }
 
           crate_version() {
-            cargo pkgid -p "$1" | sed 's/.*@//'
+            local pkgid
+            local version
+
+            pkgid="$(cargo pkgid -p "$1")"
+            version="${pkgid##*@}"
+            if [[ "$version" == "$pkgid" ]]; then
+              version="${pkgid##*#}"
+            fi
+            echo "$version"
           }
 
           crate_status_code() {
