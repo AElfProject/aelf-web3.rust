@@ -94,10 +94,29 @@ jobs:
             echo "$version"
           }
 
-          crate_status_code() {
+          crate_registry_state() {
             local pkg="$1"
             local version="$2"
-            curl -sS -o /dev/null -w '%{http_code}' "https://crates.io/api/v1/crates/${pkg}/${version}"
+            local output
+            local cmd_status
+
+            set +e
+            output="$(cargo info "${pkg}@${version}" --registry crates-io 2>&1)"
+            cmd_status=$?
+            set -e
+
+            if [[ "$cmd_status" -eq 0 ]]; then
+              echo "present"
+              return 0
+            fi
+
+            if grep -qi "could not find" <<< "$output"; then
+              echo "missing"
+              return 0
+            fi
+
+            echo "::error::Failed to query crates.io index for ${pkg} ${version}: ${output}" >&2
+            return 1
           }
 
           ensure_crate_visible() {
@@ -107,22 +126,18 @@ jobs:
             local sleep_seconds=10
 
             for ((attempt = 1; attempt <= max_attempts; attempt++)); do
-              http_code="$(crate_status_code "$pkg" "$version")"
-              case "$http_code" in
-                200)
+              state="$(crate_registry_state "$pkg" "$version")"
+              case "$state" in
+                present)
                   echo "${pkg} ${version} is visible on crates.io."
                   return 0
                   ;;
-                404)
+                missing)
                   echo "Waiting for ${pkg} ${version} to become visible on crates.io (${attempt}/${max_attempts})..."
                   sleep "$sleep_seconds"
                   ;;
-                5??)
-                  echo "::error::crates.io returned ${http_code} while checking ${pkg} ${version}."
-                  return 1
-                  ;;
                 *)
-                  echo "::error::Unexpected crates.io status ${http_code} while checking ${pkg} ${version}."
+                  echo "::error::Unexpected crates.io registry state '${state}' while checking ${pkg} ${version}."
                   return 1
                   ;;
               esac
@@ -156,9 +171,9 @@ jobs:
               continue
             fi
 
-            http_code="$(crate_status_code "$pkg" "$version")"
-            case "$http_code" in
-              200)
+            state="$(crate_registry_state "$pkg" "$version")"
+            case "$state" in
+              present)
                 if [[ "$SKIP_PUBLISHED" == "true" ]]; then
                   echo "Skipping ${pkg} ${version}; version already exists on crates.io."
                   continue
@@ -166,14 +181,10 @@ jobs:
                 echo "::error::${pkg} ${version} already exists on crates.io."
                 exit 1
                 ;;
-              404)
-                ;;
-              5??)
-                echo "::error::crates.io returned ${http_code} while checking ${pkg} ${version}."
-                exit 1
+              missing)
                 ;;
               *)
-                echo "::error::Unexpected crates.io status ${http_code} while checking ${pkg} ${version}."
+                echo "::error::Unexpected crates.io registry state '${state}' while checking ${pkg} ${version}."
                 exit 1
                 ;;
             esac
