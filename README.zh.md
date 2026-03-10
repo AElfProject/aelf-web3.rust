@@ -329,8 +329,15 @@ tests/fixtures/
 
 1. 用 `scripts/sync_proto.sh` 同步 upstream proto
 2. 执行 `cargo fmt`、`cargo +1.85.0 check --workspace --all-targets --all-features --locked`、`cargo clippy --workspace --all-targets --all-features`、`cargo audit`、`cargo check --workspace --examples`、`cargo test --workspace`
-3. 检查 `CHANGELOG.md`，然后先手动运行一次 `publish` GitHub Actions workflow，并把 `dry_run` 设为 `true`
-4. 确认 crates.io token 已配置后，再以 `dry_run=false` 重新运行 `publish` workflow
+3. 检查 `CHANGELOG.md`，然后先手动运行一次 `publish` GitHub Actions workflow，并把 `dry_run` 设为 `true`。全量发版时保持 `packages` 为空；如果只是验证恢复路径，可设置 `packages=aelf-sdk`
+4. 确认 crates.io token 已配置后，再以 `dry_run=false` 重新运行 `publish` workflow。保留 `skip_published=true`，这样在部分发布成功后可以安全重试
+5. 如果 crates.io 在部分 crate 已发布后返回瞬时错误，重新运行 workflow，并设置 `dry_run=false`、`packages=<剩余-crates>`、`skip_published=true`。针对 2026 年 3 月 10 日这次事故，恢复时应使用 `packages=aelf-sdk`
+
+发布说明：
+
+- 发布 workflow 会按依赖顺序发布：`aelf-proto`、`aelf-crypto`、`aelf-client`、`aelf-keystore`、`aelf-contract`、`aelf-sdk`
+- 全量 dry-run 仍然使用 `cargo publish --workspace --dry-run --locked`，这样可以一起验证尚未发布但彼此依赖的 workspace 版本
+- crates.io 已发布版本不可覆盖；如果某个版本发布内容有误，只能先 `yank`，再发布新版本
 
 CI 定义在 `.github/workflows/ci.yml`。
 发布流程定义在 `.github/workflows/publish.yml`，需要配置仓库 secret `CARGO_REGISTRY_TOKEN`。
