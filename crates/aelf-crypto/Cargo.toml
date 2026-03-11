@@ -8,7 +8,7 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-aelf-proto = { path = "../aelf-proto", version = "=0.1.0-alpha.0" }
+aelf-proto = { path = "../aelf-proto", version = "=0.1.0-alpha.1" }
 bs58.workspace = true
 coins-bip32.workspace = true
 coins-bip39.workspace = true

@@ -14,6 +14,7 @@ mod tests;
 
 pub use crate::error::AElfError;
 
+#[cfg(feature = "native-http")]
 use crate::config::ClientConfig;
 use crate::dto::{
     BlockDto, CalculateTransactionFeeInput, CalculateTransactionFeeOutput, ChainStatusDto,
@@ -22,15 +23,17 @@ use crate::dto::{
     SendTransactionOutput, TaskQueueInfoDto, TransactionPoolStatusOutput, TransactionResultDto,
 };
 use crate::protobuf::RawBytesMessage;
-use crate::provider::{HttpProvider, Provider};
+#[cfg(feature = "native-http")]
+use crate::provider::HttpProvider;
+use crate::provider::Provider;
 use aelf_crypto::{
     address_from_public_key, address_to_pb, base58_to_chain_id, decode_address, pb_to_address,
     sha256_bytes, sign_transaction, Wallet,
 };
 use aelf_proto::aelf::{Address, Hash, Transaction};
 use base64::Engine;
+use http::Method;
 use prost::Message;
-use reqwest::Method;
 use std::fmt;
 use std::sync::Arc;
 use zeroize::Zeroize;
@@ -40,6 +43,43 @@ const NET_API_BASE: &str = "api/net";
 const READONLY_PRIVATE_KEY: &str =
     "0000000000000000000000000000000000000000000000000000000000000001";
 
+fn strip_transaction_id_quotes(value: &str) -> &str {
+    let trimmed = value.trim();
+    trimmed
+        .strip_prefix('"')
+        .and_then(|unquoted| unquoted.strip_suffix('"'))
+        .unwrap_or(trimmed)
+}
+
+fn is_valid_transaction_id(value: &str) -> bool {
+    let candidate = strip_transaction_id_quotes(value);
+    let candidate = candidate
+        .strip_prefix("0x")
+        .or_else(|| candidate.strip_prefix("0X"))
+        .unwrap_or(candidate);
+    candidate.len() == 64 && candidate.chars().all(|char| char.is_ascii_hexdigit())
+}
+
+fn validate_transaction_id(
+    transaction_id: impl Into<String>,
+    raw_response: &str,
+) -> Result<String, AElfError> {
+    let transaction_id = transaction_id.into();
+    let transaction_id = strip_transaction_id_quotes(&transaction_id).to_owned();
+    if transaction_id.is_empty() {
+        return Err(AElfError::UnexpectedResponse(
+            "empty sendTransaction response".to_owned(),
+        ));
+    }
+    if is_valid_transaction_id(&transaction_id) {
+        Ok(transaction_id)
+    } else {
+        Err(AElfError::UnexpectedResponse(format!(
+            "sendTransaction returned a non-transaction id payload: {raw_response}"
+        )))
+    }
+}
+
 /// Async HTTP client used by the facade crate and lower-level integrations.
 #[derive(Clone)]
 pub struct AElfClient {
@@ -48,6 +88,7 @@ pub struct AElfClient {
 
 impl AElfClient {
     /// Creates a client backed by the default HTTP provider.
+    #[cfg(feature = "native-http")]
     pub fn new(config: ClientConfig) -> Result<Self, AElfError> {
         Self::with_provider(HttpProvider::new(config)?)
     }
@@ -342,23 +383,21 @@ impl TransactionService {
                 serde_json::json!({ "RawTransaction": raw_transaction }),
             )
             .await?;
-        serde_json::from_str::<SendTransactionOutput>(&text)
-            .or_else(|_| {
-                serde_json::from_str::<String>(&text)
-                    .map(|transaction_id| SendTransactionOutput { transaction_id })
-            })
-            .or_else(|_| {
-                let transaction_id = text.trim().trim_matches('"').to_owned();
-                if transaction_id.is_empty() {
-                    Err(serde_json::Error::io(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        "empty sendTransaction response",
-                    )))
-                } else {
-                    Ok(SendTransactionOutput { transaction_id })
-                }
-            })
-            .map_err(AElfError::Json)
+        if let Ok(output) = serde_json::from_str::<SendTransactionOutput>(&text) {
+            return Ok(SendTransactionOutput {
+                transaction_id: validate_transaction_id(output.transaction_id, &text)?,
+            });
+        }
+
+        if let Ok(transaction_id) = serde_json::from_str::<String>(&text) {
+            return Ok(SendTransactionOutput {
+                transaction_id: validate_transaction_id(transaction_id, &text)?,
+            });
+        }
+
+        Ok(SendTransactionOutput {
+            transaction_id: validate_transaction_id(&text, &text)?,
+        })
     }
 
     pub async fn send_transactions(

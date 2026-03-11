@@ -1,8 +1,10 @@
 use crate::dto::CreateRawTransactionInput;
 use crate::provider::{MockCallKind, MockProvider, MockRecordedRequest, MockResponse};
 use crate::{AElfClient, AElfError};
-use reqwest::Method;
+use http::Method;
 use serde_json::{json, Value};
+
+const VALID_TX_ID: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
 fn mock_client(responses: Vec<MockResponse>) -> (AElfClient, MockProvider) {
     let provider = MockProvider::new(responses);
@@ -34,8 +36,9 @@ fn assert_single_request(provider: &MockProvider) -> MockRecordedRequest {
 
 #[tokio::test]
 async fn send_transaction_accepts_object_response() {
-    let (client, provider) =
-        mock_client(vec![MockResponse::text(r#"{"TransactionId":"tx-object"}"#)]);
+    let (client, provider) = mock_client(vec![MockResponse::text(format!(
+        r#"{{"TransactionId":"{VALID_TX_ID}"}}"#
+    ))]);
 
     let output = client
         .tx()
@@ -43,7 +46,7 @@ async fn send_transaction_accepts_object_response() {
         .await
         .expect("send transaction");
 
-    assert_eq!(output.transaction_id, "tx-object");
+    assert_eq!(output.transaction_id, VALID_TX_ID);
 
     let request = assert_single_request(&provider);
     assert_eq!(request.kind, MockCallKind::Text);
@@ -57,7 +60,7 @@ async fn send_transaction_accepts_object_response() {
 
 #[tokio::test]
 async fn send_transaction_accepts_json_string_response() {
-    let (client, _) = mock_client(vec![MockResponse::text(r#""tx-string""#)]);
+    let (client, _) = mock_client(vec![MockResponse::text(format!(r#""{VALID_TX_ID}""#))]);
 
     let output = client
         .tx()
@@ -65,12 +68,12 @@ async fn send_transaction_accepts_json_string_response() {
         .await
         .expect("send transaction");
 
-    assert_eq!(output.transaction_id, "tx-string");
+    assert_eq!(output.transaction_id, VALID_TX_ID);
 }
 
 #[tokio::test]
 async fn send_transaction_accepts_plain_text_response() {
-    let (client, _) = mock_client(vec![MockResponse::text("tx-plain")]);
+    let (client, _) = mock_client(vec![MockResponse::text(VALID_TX_ID)]);
 
     let output = client
         .tx()
@@ -78,7 +81,20 @@ async fn send_transaction_accepts_plain_text_response() {
         .await
         .expect("send transaction");
 
-    assert_eq!(output.transaction_id, "tx-plain");
+    assert_eq!(output.transaction_id, VALID_TX_ID);
+}
+
+#[tokio::test]
+async fn send_transaction_accepts_0x_prefixed_plain_text_response() {
+    let (client, _) = mock_client(vec![MockResponse::text(format!("0x{VALID_TX_ID}"))]);
+
+    let output = client
+        .tx()
+        .send_transaction("raw-transaction")
+        .await
+        .expect("send transaction");
+
+    assert_eq!(output.transaction_id, format!("0x{VALID_TX_ID}"));
 }
 
 #[tokio::test]
@@ -91,7 +107,33 @@ async fn send_transaction_rejects_empty_response() {
         .await
         .expect_err("empty response should fail");
 
-    assert!(matches!(error, AElfError::Json(_)));
+    assert!(matches!(error, AElfError::UnexpectedResponse(_)));
+}
+
+#[tokio::test]
+async fn send_transaction_rejects_non_txid_plain_text_response() {
+    let (client, _) = mock_client(vec![MockResponse::text("tx-plain")]);
+
+    let error = client
+        .tx()
+        .send_transaction("raw-transaction")
+        .await
+        .expect_err("non-txid response should fail");
+
+    assert!(matches!(error, AElfError::UnexpectedResponse(_)));
+}
+
+#[tokio::test]
+async fn send_transaction_rejects_ok_plain_text_response() {
+    let (client, _) = mock_client(vec![MockResponse::text("ok")]);
+
+    let error = client
+        .tx()
+        .send_transaction("raw-transaction")
+        .await
+        .expect_err("ok response should fail");
+
+    assert!(matches!(error, AElfError::UnexpectedResponse(_)));
 }
 
 #[tokio::test]

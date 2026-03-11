@@ -7,13 +7,16 @@ repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
+[features]
+default = ["native-http"]
+native-http = ["aelf-client/native-http"]
+
 [dependencies]
-aelf-client = { path = "../aelf-client", version = "=0.1.0-alpha.0" }
-aelf-crypto = { path = "../aelf-crypto", version = "=0.1.0-alpha.0" }
-aelf-proto = { path = "../aelf-proto", version = "=0.1.0-alpha.0" }
+aelf-client = { path = "../aelf-client", version = "=0.1.0-alpha.1", default-features = false }
+aelf-crypto = { path = "../aelf-crypto", version = "=0.1.0-alpha.1" }
+aelf-proto = { path = "../aelf-proto", version = "=0.1.0-alpha.1" }
 bytes.workspace = true
 hex.workspace = true
-lru.workspace = true
 pbjson-types.workspace = true
 prost.workspace = true
 prost-reflect.workspace = true
@@ -21,6 +24,11 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+
+[dev-dependencies]
+async-trait.workspace = true
+base64.workspace = true
+http.workspace = true
 
 [lints]
 workspace = true

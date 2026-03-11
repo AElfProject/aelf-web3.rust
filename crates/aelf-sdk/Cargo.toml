@@ -7,12 +7,16 @@ repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
+[features]
+default = ["native-http"]
+native-http = ["aelf-client/native-http", "aelf-contract/native-http"]
+
 [dependencies]
-aelf-client = { path = "../aelf-client", version = "=0.1.0-alpha.0" }
-aelf-contract = { path = "../aelf-contract", version = "=0.1.0-alpha.0" }
-aelf-crypto = { path = "../aelf-crypto", version = "=0.1.0-alpha.0" }
-aelf-keystore = { path = "../aelf-keystore", version = "=0.1.0-alpha.0" }
-aelf-proto = { path = "../aelf-proto", version = "=0.1.0-alpha.0" }
+aelf-client = { path = "../aelf-client", version = "=0.1.0-alpha.1", default-features = false }
+aelf-contract = { path = "../aelf-contract", version = "=0.1.0-alpha.1", default-features = false }
+aelf-crypto = { path = "../aelf-crypto", version = "=0.1.0-alpha.1" }
+aelf-keystore = { path = "../aelf-keystore", version = "=0.1.0-alpha.1" }
+aelf-proto = { path = "../aelf-proto", version = "=0.1.0-alpha.1" }
 
 [dev-dependencies]
 hex.workspace = true

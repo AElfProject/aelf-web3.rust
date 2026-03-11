@@ -18,6 +18,8 @@ pub struct RequestError {
 pub enum AElfError {
     #[error(transparent)]
     Request(Box<RequestError>),
+    #[error("unexpected response: {0}")]
+    UnexpectedResponse(String),
     #[error("invalid config: {0}")]
     InvalidConfig(String),
     #[error("missing field: {0}")]
@@ -30,6 +32,7 @@ pub enum AElfError {
     Base64(#[from] base64::DecodeError),
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),
+    #[cfg(feature = "native-http")]
     #[error("http error: {0}")]
     Http(#[from] reqwest::Error),
     #[error("protobuf encode error: {0}")]
@@ -50,6 +53,7 @@ impl AElfError {
         }))
     }
 
+    #[cfg(feature = "native-http")]
     pub(crate) fn from_response(
         endpoint: String,
         status: reqwest::StatusCode,

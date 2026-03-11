@@ -1,9 +1,14 @@
+#[cfg(feature = "native-http")]
 use crate::config::{ClientConfig, RetryPolicy};
 use crate::error::AElfError;
 use async_trait::async_trait;
+use http::Method;
+#[cfg(feature = "native-http")]
 use reqwest::header::{ACCEPT, CONTENT_TYPE};
-use reqwest::{Method, StatusCode};
+#[cfg(feature = "native-http")]
+use reqwest::StatusCode;
 use serde_json::Value;
+#[cfg(feature = "native-http")]
 use std::time::Duration;
 
 /// Abstract transport used by the SDK client.
@@ -29,12 +34,14 @@ pub trait Provider: Send + Sync {
 }
 
 /// Default HTTP transport backed by `reqwest`.
+#[cfg(feature = "native-http")]
 #[derive(Clone, Debug)]
 pub struct HttpProvider {
     config: ClientConfig,
     client: reqwest::Client,
 }
 
+#[cfg(feature = "native-http")]
 impl HttpProvider {
     /// Creates a new HTTP transport from client configuration.
     pub fn new(config: ClientConfig) -> Result<Self, AElfError> {
@@ -113,6 +120,7 @@ impl HttpProvider {
     }
 }
 
+#[cfg(feature = "native-http")]
 #[async_trait]
 impl Provider for HttpProvider {
     async fn request_json(
@@ -346,7 +354,7 @@ mod test_support {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "native-http"))]
 mod tests {
     use super::*;
     use base64::Engine;

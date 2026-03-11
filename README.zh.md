@@ -17,7 +17,7 @@
 
 当前 v0.1 不包含：
 
-- WASM / browser runtime 支持
+- Browser `wasm32-unknown-unknown` runtime 支持
 - Rust-only keystore 格式
 - 类似 Python `toolkits.py` 的业务工具箱
 
@@ -32,24 +32,27 @@
 | Dynamic contract calls | 已实现 | `call_typed`、`call_json`、`send_typed`、`send_json` |
 | Proto vendoring pipeline | 已实现 | `scripts/sync_proto.sh` |
 | 本地节点集成测试脚手架 | 已实现 | 默认 ignored，需要手动启用 |
-| WASM 支持 | 规划中 | v1 之后处理 |
+| `wasm32-wasip2` 自定义 provider 支持 | 已实现 | 使用 `default-features = false` + `AElfClient::with_provider(...)` |
+| Browser `wasm32-unknown-unknown` 支持 | 规划中 | v1 之后处理 |
 
 ## Install
 
-在 crate 发布到 crates.io 之前，建议先用 path 或 git 依赖。
+已发布版本建议直接走 crates.io；如果需要使用当前 workspace 的最新代码，再走 path 依赖。
+
+当前 crates.io 上已经发布的版本是 `0.1.0-alpha.0`。这条开发线里的 `0.1.0-alpha.1` 包含新的 `wasm32-wasip2` custom-provider 能力，在正式发布前请通过 path 依赖接入。
+
+```toml
+[dependencies]
+aelf-sdk = "0.1.0-alpha.0"
+tokio = { version = "1", features = ["macros", "rt"] }
+```
+
+Path 依赖：
 
 ```toml
 [dependencies]
 aelf-sdk = { path = "crates/aelf-sdk" }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-```
-
-Git 依赖：
-
-```toml
-[dependencies]
-aelf-sdk = { git = "https://github.com/AElfProject/aelf-web3.rust", tag = "v0.1.0-alpha.0" }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "rt"] }
 ```
 
 ## Quick Start
@@ -190,7 +193,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Examples
 
-示例文件保留在 `/examples`，由 `aelf-sdk` crate 显式挂载编译。
+真正的示例源码现在只保留在 `crates/aelf-sdk/examples`。根目录 `/examples` 只做薄包装转发，避免再维护两套实现。
 
 ```bash
 cargo run -p aelf-sdk --example basic_client
@@ -213,11 +216,70 @@ cargo run -p aelf-sdk --example raw_transaction_flow
 
 ## Feature Flags
 
-v0.1 alpha 故意保持最小表面，目前没有额外的 Cargo feature flag。
+v0.1 alpha 当前有一个传输层 feature：
 
-- Runtime：仅 Tokio
-- TLS：`reqwest + rustls`
-- Proto JSON：`pbjson`
+- `native-http`（默认开启）：启用 `HttpProvider` 和 `AElfClient::new(...)`
+- `default-features = false`：保留 transport-agnostic 形态，由 host runtime 自己实现 `Provider`
+
+在关闭默认 feature 后，wallet、keystore、transaction builder、typed contract、dynamic contract 仍然可用，只是 client 需要通过 `AElfClient::with_provider(...)` 构造。
+
+## Native WASM (`wasm32-wasip2`)
+
+`aelf-sdk` 现在可以被 Portkey 这一类 `wasm32-wasip2` native-wasm skill runtime 消费。
+
+WASM consumer 推荐关闭 native HTTP：
+
+```toml
+[dependencies]
+aelf-sdk = { version = "0.1.0-alpha.1", default-features = false }
+async-trait = "0.1"
+http = "1"
+serde_json = "1"
+```
+
+然后由 host runtime 自己实现 `Provider`，再通过 `with_provider(...)` 构造 client：
+
+```rust
+use aelf_sdk::{AElfClient, AElfError, Provider};
+use async_trait::async_trait;
+use http::Method;
+use serde_json::Value;
+
+#[derive(Clone)]
+struct HostProvider;
+
+#[async_trait]
+impl Provider for HostProvider {
+    async fn request_json(
+        &self,
+        _method: Method,
+        _path: &str,
+        _query: &[(&str, String)],
+        _body: Option<Value>,
+    ) -> Result<Value, AElfError> {
+        Err(AElfError::request("host transport not wired", None))
+    }
+
+    async fn request_text(
+        &self,
+        _method: Method,
+        _path: &str,
+        _query: &[(&str, String)],
+        _body: Option<Value>,
+    ) -> Result<String, AElfError> {
+        Err(AElfError::request("host transport not wired", None))
+    }
+}
+
+let client = AElfClient::with_provider(HostProvider)?;
+# let _ = client;
+```
+
+补充说明：
+
+- SDK 不接管 Portkey / IronClaw 的 `walletExport` 或 workspace memory 契约。
+- Host runtime 继续维护自己的 HTTP binding 和 wallet store，`aelf-sdk` 负责链协议、签名、合约、交易等通用能力。
+- Browser `wasm32-unknown-unknown` 仍然不在当前 alpha 范围内。
 
 ## Transport Behavior
 
@@ -245,7 +307,9 @@ let no_retry = AElfClient::new(
 # let _ = (client, no_retry);
 ```
 
-dynamic contract 的 descriptor 现在使用内存内 `64` 容量的 LRU cache，避免长时间运行的服务无限增长。
+`send_transaction` 现在只把 DTO 或 transaction-id 形态的字符串视为成功，像 `"ok"` 或代理错误文本这类非空文本会被拒绝为 unexpected response。
+
+`client.contract_at(...)` 在每次新建 dynamic handle 时仍然会 fresh 拉一次 descriptor。typed contract wrapper 现在会在每个 handle 实例内 lazy 缓存第一次 descriptor，并在后续调用和 clone 后复用，但不会重新引入进程级全局 ABI cache。
 
 ## Local Node Testing
 
@@ -254,12 +318,23 @@ dynamic contract 的 descriptor 现在使用内存内 `64` 容量的 LRU cache�
 ```bash
 cargo check --workspace
 cargo check --workspace --examples
+cargo check -p aelf-client --target wasm32-wasip2 --no-default-features
+cargo check -p aelf-contract --target wasm32-wasip2 --no-default-features
+cargo check -p aelf-sdk --target wasm32-wasip2 --no-default-features
 ```
 
 运行单元测试：
 
 ```bash
 cargo test --workspace
+```
+
+默认的 workspace test 故意不包含 ignored 的公网 live smoke，这样本地和 CI 的主测试集仍然保持确定性。
+
+运行公网 readonly smoke：
+
+```bash
+cargo test -p aelf-sdk --test public_readonly_smoke -- --ignored --test-threads=1 --nocapture
 ```
 
 运行本地节点集成测试：
@@ -274,6 +349,14 @@ ignored 测试依赖以下环境变量：
 - `AELF_PRIVATE_KEY`
 - `AELF_TOKEN_CONTRACT`
 - `AELF_TO_ADDRESS`
+
+手动 funded transaction smoke 已放到 `.github/workflows/transaction-smoke.yml`，依赖以下仓库 secrets：
+
+- `AELF_TRANSACTION_SMOKE_ENDPOINT`
+- `AELF_TRANSACTION_SMOKE_PRIVATE_KEY`
+- `AELF_TRANSACTION_SMOKE_TO_ADDRESS`
+- `AELF_TRANSACTION_SMOKE_TOKEN_CONTRACT`（可选）
+- `AELF_TRANSACTION_SMOKE_AMOUNT`（可选）
 
 ## Public Node Verification
 
