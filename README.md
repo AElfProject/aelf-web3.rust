@@ -329,8 +329,15 @@ Release flow:
 
 1. Sync upstream proto files with `scripts/sync_proto.sh`
 2. Run `cargo fmt`, `cargo +1.85.0 check --workspace --all-targets --all-features --locked`, `cargo clippy --workspace --all-targets --all-features`, `cargo audit`, `cargo check --workspace --examples`, `cargo test --workspace`
-3. Review `CHANGELOG.md`, then run the manual `publish` GitHub Actions workflow with `dry_run=true`
-4. Re-run the `publish` workflow with `dry_run=false` after confirming the crates.io token is configured
+3. Review `CHANGELOG.md`, then run the manual `publish` GitHub Actions workflow with `dry_run=true`. Leave `packages` empty for a full release dry-run, or set `packages=aelf-sdk` to verify a targeted recovery path.
+4. Re-run the `publish` workflow with `dry_run=false` after confirming the crates.io token is configured. Leave `skip_published=true` so retries can safely resume after a partial publish.
+5. If crates.io returns a transient error after some crates are already published, rerun the workflow with `dry_run=false`, `packages=<remaining-crates>`, and `skip_published=true`. For the March 10, 2026 incident, the recovery command is `packages=aelf-sdk`.
+
+Publishing notes:
+
+- The publish workflow releases crates in dependency order: `aelf-proto`, `aelf-crypto`, `aelf-client`, `aelf-keystore`, `aelf-contract`, `aelf-sdk`.
+- Full-workspace dry-runs still use `cargo publish --workspace --dry-run --locked` so unpublished interdependent versions can be validated together.
+- crates.io releases are immutable. If a published version is wrong, it must be `yank`ed and replaced with a new version.
 
 CI is defined in `.github/workflows/ci.yml`.
 Publishing is defined in `.github/workflows/publish.yml` and expects the `CARGO_REGISTRY_TOKEN` repository secret.
