@@ -16,9 +16,27 @@ jobs:
       - name: msrv
         run: cargo check --workspace --all-targets --all-features --locked
 
-  test:
+  wasm:
     runs-on: ubuntu-latest
     needs: msrv
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+      - uses: Swatinem/rust-cache@v2
+      - name: wasm aelf-client
+        run: cargo check -p aelf-client --target wasm32-wasip2 --no-default-features
+      - name: wasm aelf-contract
+        run: cargo check -p aelf-contract --target wasm32-wasip2 --no-default-features
+      - name: wasm aelf-sdk
+        run: cargo check -p aelf-sdk --target wasm32-wasip2 --no-default-features
+
+  test:
+    runs-on: ubuntu-latest
+    needs:
+      - msrv
+      - wasm
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -35,3 +53,28 @@ jobs:
         run: cargo check --workspace --examples
       - name: test
         run: cargo test --workspace --all-targets
+
+  public-smoke:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: public readonly smoke
+        run: |
+          retry() {
+            local attempts=3
+            local delay=5
+            for attempt in $(seq 1 "$attempts"); do
+              if "$@"; then
+                return 0
+              fi
+              if [[ "$attempt" -lt "$attempts" ]]; then
+                sleep "$delay"
+              fi
+            done
+            return 1
+          }
+
+          retry cargo test -p aelf-sdk --test public_readonly_smoke -- --ignored --test-threads=1 --nocapture

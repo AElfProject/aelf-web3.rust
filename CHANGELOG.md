@@ -5,6 +5,30 @@ All notable changes to `aelf-sdk.rust` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-alpha.1] - 2026-03-11
+
+### Added
+
+- `native-http` Cargo feature on `aelf-client`, `aelf-contract`, and `aelf-sdk`, enabled by default for native consumers
+- `AElfClient::with_provider(...)` and `Provider` re-exports on the facade crate for custom transports
+- `wasm32-wasip2` CI compile gates for `aelf-client`, `aelf-contract`, and `aelf-sdk` with `--no-default-features`
+- public readonly smoke coverage in a dedicated CI job plus a manual funded transaction smoke workflow
+
+### Changed
+
+- The workspace version moved to `0.1.0-alpha.1`
+- Tokio now uses the wasm-compatible `rt` feature instead of `rt-multi-thread`
+- `HttpProvider` and `AElfClient::new(...)` are now gated behind `native-http`, while the core SDK remains provider-first
+- root `/examples` now forward to `crates/aelf-sdk/examples` so the SDK only maintains one example source of truth
+- wallet keystore examples now redact private key and mnemonic output
+
+### Fixed
+
+- `aelf-client`, `aelf-contract`, and `aelf-sdk` now compile for `wasm32-wasip2` when consumed with `default-features = false`
+- The facade crate now exposes the transport abstraction needed by native-wasm skill runtimes
+- `send_transaction` no longer treats arbitrary non-empty text payloads as success
+- typed contract wrappers now lazily reuse the first descriptor per handle, while direct `contract_at(...)` calls still fetch a fresh descriptor for each new handle
+
 ## [0.1.0-alpha.0] - 2026-03-10
 
 ### Added

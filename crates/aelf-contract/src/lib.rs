@@ -7,27 +7,13 @@ use aelf_client::protobuf::RawBytesMessage;
 use aelf_client::{AElfClient, AElfError};
 use aelf_crypto::{address_to_pb, hash_to_pb, pb_to_address, Wallet};
 use aelf_proto::{aedpos, cross_chain, election, token, vote};
-use lru::LruCache;
 use prost::Message;
 use prost_reflect::{DescriptorPool, DynamicMessage, Kind, MessageDescriptor, MethodDescriptor};
 use serde::de::IntoDeserializer;
 use serde_json::{Map, Value};
-use std::num::NonZeroUsize;
-use std::sync::OnceLock;
+use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::RwLock;
-
-const DESCRIPTOR_CACHE_CAPACITY: usize = 64;
-
-static DESCRIPTOR_CACHE: OnceLock<RwLock<LruCache<String, DescriptorPool>>> = OnceLock::new();
-
-fn descriptor_cache() -> &'static RwLock<LruCache<String, DescriptorPool>> {
-    DESCRIPTOR_CACHE.get_or_init(|| {
-        RwLock::new(LruCache::new(
-            NonZeroUsize::new(DESCRIPTOR_CACHE_CAPACITY).expect("cache capacity must be non-zero"),
-        ))
-    })
-}
+use tokio::sync::OnceCell;
 
 /// Errors returned by typed and dynamic contract operations.
 #[derive(Debug, Error)]
@@ -71,26 +57,11 @@ impl DynamicContract {
         wallet: Wallet,
     ) -> Result<Self, ContractError> {
         let address = address.into();
-        let pool = {
-            let mut cache = descriptor_cache().write().await;
-            cache.get(&address).cloned()
-        };
-
-        let pool = match pool {
-            Some(pool) => pool,
-            None => {
-                let bytes = client
-                    .chain()
-                    .get_contract_file_descriptor_set(&address)
-                    .await?;
-                let pool = DescriptorPool::decode(bytes.as_slice())?;
-                descriptor_cache()
-                    .write()
-                    .await
-                    .put(address.clone(), pool.clone());
-                pool
-            }
-        };
+        let bytes = client
+            .chain()
+            .get_contract_file_descriptor_set(&address)
+            .await?;
+        let pool = DescriptorPool::decode(bytes.as_slice())?;
 
         Ok(Self {
             client,
@@ -369,6 +340,40 @@ async fn build_signed_raw(
     Ok(hex::encode(transaction.encode_to_vec()))
 }
 
+#[derive(Clone)]
+struct LazyDynamicContract {
+    client: AElfClient,
+    wallet: Wallet,
+    address: String,
+    dynamic: Arc<OnceCell<DynamicContract>>,
+}
+
+impl LazyDynamicContract {
+    fn new(client: AElfClient, wallet: Wallet, address: impl Into<String>) -> Self {
+        Self {
+            client,
+            wallet,
+            address: address.into(),
+            dynamic: Arc::new(OnceCell::new()),
+        }
+    }
+
+    async fn get(&self) -> Result<DynamicContract, ContractError> {
+        let contract = self
+            .dynamic
+            .get_or_try_init(|| async {
+                DynamicContract::at(
+                    self.client.clone(),
+                    self.address.clone(),
+                    self.wallet.clone(),
+                )
+                .await
+            })
+            .await?;
+        Ok(contract.clone())
+    }
+}
+
 /// Typed wrapper for the genesis zero contract.
 #[derive(Clone)]
 pub struct ZeroContract {
@@ -413,18 +418,14 @@ impl ZeroContract {
 /// Typed wrapper for the token contract.
 #[derive(Clone)]
 pub struct TokenContract {
-    client: AElfClient,
-    wallet: Wallet,
-    address: String,
+    dynamic: LazyDynamicContract,
 }
 
 impl TokenContract {
     /// Creates a typed token contract wrapper.
     pub fn new(client: AElfClient, wallet: Wallet, address: impl Into<String>) -> Self {
         Self {
-            client,
-            wallet,
-            address: address.into(),
+            dynamic: LazyDynamicContract::new(client, wallet, address),
         }
     }
 
@@ -485,30 +486,21 @@ impl TokenContract {
     }
 
     async fn dynamic(&self) -> Result<DynamicContract, ContractError> {
-        DynamicContract::at(
-            self.client.clone(),
-            self.address.clone(),
-            self.wallet.clone(),
-        )
-        .await
+        self.dynamic.get().await
     }
 }
 
 /// Typed wrapper for the election contract.
 #[derive(Clone)]
 pub struct ElectionContract {
-    client: AElfClient,
-    wallet: Wallet,
-    address: String,
+    dynamic: LazyDynamicContract,
 }
 
 impl ElectionContract {
     /// Creates a typed election contract wrapper.
     pub fn new(client: AElfClient, wallet: Wallet, address: impl Into<String>) -> Self {
         Self {
-            client,
-            wallet,
-            address: address.into(),
+            dynamic: LazyDynamicContract::new(client, wallet, address),
         }
     }
 
@@ -555,30 +547,21 @@ impl ElectionContract {
     }
 
     async fn dynamic(&self) -> Result<DynamicContract, ContractError> {
-        DynamicContract::at(
-            self.client.clone(),
-            self.address.clone(),
-            self.wallet.clone(),
-        )
-        .await
+        self.dynamic.get().await
     }
 }
 
 /// Typed wrapper for the vote contract.
 #[derive(Clone)]
 pub struct VoteContract {
-    client: AElfClient,
-    wallet: Wallet,
-    address: String,
+    dynamic: LazyDynamicContract,
 }
 
 impl VoteContract {
     /// Creates a typed vote contract wrapper.
     pub fn new(client: AElfClient, wallet: Wallet, address: impl Into<String>) -> Self {
         Self {
-            client,
-            wallet,
-            address: address.into(),
+            dynamic: LazyDynamicContract::new(client, wallet, address),
         }
     }
 
@@ -616,30 +599,21 @@ impl VoteContract {
     }
 
     async fn dynamic(&self) -> Result<DynamicContract, ContractError> {
-        DynamicContract::at(
-            self.client.clone(),
-            self.address.clone(),
-            self.wallet.clone(),
-        )
-        .await
+        self.dynamic.get().await
     }
 }
 
 /// Typed wrapper for the cross-chain contract.
 #[derive(Clone)]
 pub struct CrossChainContract {
-    client: AElfClient,
-    wallet: Wallet,
-    address: String,
+    dynamic: LazyDynamicContract,
 }
 
 impl CrossChainContract {
     /// Creates a typed cross-chain contract wrapper.
     pub fn new(client: AElfClient, wallet: Wallet, address: impl Into<String>) -> Self {
         Self {
-            client,
-            wallet,
-            address: address.into(),
+            dynamic: LazyDynamicContract::new(client, wallet, address),
         }
     }
 
@@ -691,30 +665,21 @@ impl CrossChainContract {
     }
 
     async fn dynamic(&self) -> Result<DynamicContract, ContractError> {
-        DynamicContract::at(
-            self.client.clone(),
-            self.address.clone(),
-            self.wallet.clone(),
-        )
-        .await
+        self.dynamic.get().await
     }
 }
 
 /// Typed wrapper for the AEDPoS consensus contract.
 #[derive(Clone)]
 pub struct AedposContract {
-    client: AElfClient,
-    wallet: Wallet,
-    address: String,
+    dynamic: LazyDynamicContract,
 }
 
 impl AedposContract {
     /// Creates a typed AEDPoS contract wrapper.
     pub fn new(client: AElfClient, wallet: Wallet, address: impl Into<String>) -> Self {
         Self {
-            client,
-            wallet,
-            address: address.into(),
+            dynamic: LazyDynamicContract::new(client, wallet, address),
         }
     }
 
@@ -737,19 +702,22 @@ impl AedposContract {
     }
 
     async fn dynamic(&self) -> Result<DynamicContract, ContractError> {
-        DynamicContract::at(
-            self.client.clone(),
-            self.address.clone(),
-            self.wallet.clone(),
-        )
-        .await
+        self.dynamic.get().await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use aelf_client::provider::Provider;
+    use async_trait::async_trait;
+    use base64::Engine;
+    use http::Method;
     use serde_json::json;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
 
     const READONLY_PRIVATE_KEY: &str =
         "0000000000000000000000000000000000000000000000000000000000000001";
@@ -810,42 +778,107 @@ mod tests {
         assert_eq!(normalized.get("symbol"), Some(&json!("ELF")));
     }
 
-    #[tokio::test]
-    async fn descriptor_cache_evicts_oldest_entry_when_capacity_is_exceeded() {
-        let pool = DescriptorPool::decode(aelf_proto::FILE_DESCRIPTOR_SET).expect("descriptor");
-        let mut cache = descriptor_cache().write().await;
-        cache.clear();
+    #[derive(Clone)]
+    struct CountingDescriptorProvider {
+        requests: Arc<AtomicUsize>,
+    }
 
-        for index in 0..=DESCRIPTOR_CACHE_CAPACITY {
-            cache.put(format!("contract-{index}"), pool.clone());
+    #[async_trait]
+    impl Provider for CountingDescriptorProvider {
+        async fn request_json(
+            &self,
+            _method: Method,
+            _path: &str,
+            _query: &[(&str, String)],
+            _body: Option<Value>,
+        ) -> Result<Value, AElfError> {
+            Err(AElfError::request(
+                "unexpected JSON request in descriptor test",
+                None,
+            ))
         }
 
-        assert_eq!(cache.len(), DESCRIPTOR_CACHE_CAPACITY);
-        assert!(cache.peek("contract-0").is_none());
-        assert!(cache
-            .peek(&format!("contract-{DESCRIPTOR_CACHE_CAPACITY}"))
-            .is_some());
-        cache.clear();
+        async fn request_text(
+            &self,
+            method: Method,
+            path: &str,
+            query: &[(&str, String)],
+            _body: Option<Value>,
+        ) -> Result<String, AElfError> {
+            assert_eq!(method, Method::GET);
+            assert_eq!(path, "api/blockChain/contractFileDescriptorSet");
+            assert_eq!(query, &[("address", "token-contract".to_owned())]);
+
+            self.requests.fetch_add(1, Ordering::SeqCst);
+            Ok(format!(
+                "\"{}\"",
+                base64::engine::general_purpose::STANDARD.encode(aelf_proto::FILE_DESCRIPTOR_SET)
+            ))
+        }
     }
 
     #[tokio::test]
-    async fn descriptor_cache_refreshes_recently_accessed_entry() {
-        let pool = DescriptorPool::decode(aelf_proto::FILE_DESCRIPTOR_SET).expect("descriptor");
-        let mut cache = descriptor_cache().write().await;
-        cache.clear();
+    async fn dynamic_contract_fetches_descriptor_on_every_at_call() {
+        let requests = Arc::new(AtomicUsize::new(0));
+        let client = AElfClient::with_provider(CountingDescriptorProvider {
+            requests: requests.clone(),
+        })
+        .expect("client");
+        let wallet = Wallet::from_private_key(READONLY_PRIVATE_KEY).expect("wallet");
 
-        for index in 0..DESCRIPTOR_CACHE_CAPACITY {
-            cache.put(format!("contract-{index}"), pool.clone());
-        }
+        let first = DynamicContract::at(client.clone(), "token-contract", wallet.clone())
+            .await
+            .expect("first contract");
+        let second = DynamicContract::at(client, "token-contract", wallet)
+            .await
+            .expect("second contract");
 
-        assert!(cache.get("contract-0").is_some());
-        cache.put(
-            format!("contract-{DESCRIPTOR_CACHE_CAPACITY}"),
-            pool.clone(),
-        );
+        assert!(first.method("GetBalance").is_ok());
+        assert!(second.method("GetBalance").is_ok());
+        assert_eq!(requests.load(Ordering::SeqCst), 2);
+    }
 
-        assert!(cache.peek("contract-0").is_some());
-        assert!(cache.peek("contract-1").is_none());
-        cache.clear();
+    #[tokio::test]
+    async fn typed_wrapper_reuses_descriptor_within_same_handle() {
+        let requests = Arc::new(AtomicUsize::new(0));
+        let client = AElfClient::with_provider(CountingDescriptorProvider {
+            requests: requests.clone(),
+        })
+        .expect("client");
+        let wallet = Wallet::from_private_key(READONLY_PRIVATE_KEY).expect("wallet");
+        let token = TokenContract::new(client, wallet, "token-contract");
+
+        let first = token.dynamic().await.expect("first dynamic");
+        let second = token.dynamic().await.expect("second dynamic");
+
+        assert!(first.method("GetBalance").is_ok());
+        assert!(second.method("GetBalance").is_ok());
+        assert_eq!(requests.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn typed_wrapper_clone_reuses_descriptor_cache() {
+        let requests = Arc::new(AtomicUsize::new(0));
+        let client = AElfClient::with_provider(CountingDescriptorProvider {
+            requests: requests.clone(),
+        })
+        .expect("client");
+        let wallet = Wallet::from_private_key(READONLY_PRIVATE_KEY).expect("wallet");
+        let first = TokenContract::new(client, wallet, "token-contract");
+        let second = first.clone();
+
+        assert!(first
+            .dynamic()
+            .await
+            .expect("first dynamic")
+            .method("GetBalance")
+            .is_ok());
+        assert!(second
+            .dynamic()
+            .await
+            .expect("second dynamic")
+            .method("GetBalance")
+            .is_ok());
+        assert_eq!(requests.load(Ordering::SeqCst), 1);
     }
 }

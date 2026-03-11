@@ -1,0 +1,23 @@
+name: transaction-smoke
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  funded-transaction-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: funded transaction smoke
+        env:
+          AELF_ENDPOINT: ${{ secrets.AELF_TRANSACTION_SMOKE_ENDPOINT }}
+          AELF_PRIVATE_KEY: ${{ secrets.AELF_TRANSACTION_SMOKE_PRIVATE_KEY }}
+          AELF_TO_ADDRESS: ${{ secrets.AELF_TRANSACTION_SMOKE_TO_ADDRESS }}
+          AELF_TOKEN_CONTRACT: ${{ secrets.AELF_TRANSACTION_SMOKE_TOKEN_CONTRACT }}
+          AELF_AMOUNT: ${{ secrets.AELF_TRANSACTION_SMOKE_AMOUNT }}
+        run: cargo test -p aelf-sdk --test funded_transaction_smoke funded_send_transaction_smoke -- --ignored --exact --nocapture

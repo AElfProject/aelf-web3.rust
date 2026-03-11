@@ -5,7 +5,7 @@ use aelf_sdk::{decode_address, format_token_amount, AElfClient, ClientConfig, Wa
 const READONLY_PRIVATE_KEY: &str =
     "0000000000000000000000000000000000000000000000000000000000000001";
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let endpoint =
         std::env::var("AELF_ENDPOINT").unwrap_or_else(|_| "http://127.0.0.1:8000".to_owned());

@@ -17,7 +17,7 @@ Current v0.1 alpha scope:
 
 Out of scope for v0.1:
 
-- WASM/browser runtime support
+- Browser `wasm32-unknown-unknown` runtime support
 - Rust-only keystore format
 - Business toolkits similar to `toolkits.py`
 
@@ -32,24 +32,27 @@ Out of scope for v0.1:
 | Dynamic contract calls | Implemented | `call_typed`, `call_json`, `send_typed`, `send_json` |
 | Proto vendoring pipeline | Implemented | `scripts/sync_proto.sh` |
 | Local node integration test scaffold | Implemented | Ignored by default, opt in with `-- --ignored` |
-| WASM support | Planned | Post-v1 |
+| `wasm32-wasip2` custom-provider support | Implemented | Use `default-features = false` + `AElfClient::with_provider(...)` |
+| Browser `wasm32-unknown-unknown` support | Planned | Post-v1 |
 
 ## Install
 
-Until the crate is published to crates.io, use a path or git dependency.
+Use crates.io for published releases, or a path dependency while working against the workspace tip.
+
+The latest published release on crates.io is currently `0.1.0-alpha.0`. The `0.1.0-alpha.1` workspace tip includes the new `wasm32-wasip2` custom-provider flow and can be consumed via a path dependency until it is published.
+
+```toml
+[dependencies]
+aelf-sdk = "0.1.0-alpha.0"
+tokio = { version = "1", features = ["macros", "rt"] }
+```
+
+Path dependency:
 
 ```toml
 [dependencies]
 aelf-sdk = { path = "crates/aelf-sdk" }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-```
-
-Git dependency:
-
-```toml
-[dependencies]
-aelf-sdk = { git = "https://github.com/AElfProject/aelf-web3.rust", tag = "v0.1.0-alpha.0" }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "rt"] }
 ```
 
 ## Quick Start
@@ -190,7 +193,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Examples
 
-Examples are stored in `/examples` and wired into the `aelf-sdk` crate.
+The canonical example sources live in `crates/aelf-sdk/examples`. The root `/examples` directory now contains thin forwarding wrappers so there is only one maintained implementation.
 
 ```bash
 cargo run -p aelf-sdk --example basic_client
@@ -213,11 +216,70 @@ Useful environment variables:
 
 ## Feature Flags
 
-v0.1 alpha intentionally keeps the surface small. There are no optional Cargo feature flags yet.
+v0.1 alpha exposes one transport feature:
 
-- Runtime: Tokio only
-- TLS: `reqwest` with `rustls`
-- Proto JSON: `pbjson`
+- `native-http` (default): enables `HttpProvider` and `AElfClient::new(...)`
+- `default-features = false`: keeps the SDK transport-agnostic so a host runtime can provide its own `Provider`
+
+Transport-independent builds still support wallet, keystore, transaction building, typed contracts, and dynamic contracts through `AElfClient::with_provider(...)`.
+
+## Native WASM (`wasm32-wasip2`)
+
+`aelf-sdk` can now be consumed from native-wasm skill runtimes such as Portkey-style `wasm32-wasip2` sidecars.
+
+Use the facade without native HTTP:
+
+```toml
+[dependencies]
+aelf-sdk = { version = "0.1.0-alpha.1", default-features = false }
+async-trait = "0.1"
+http = "1"
+serde_json = "1"
+```
+
+Then implement `Provider` in the host runtime and build the client with `with_provider(...)`:
+
+```rust
+use aelf_sdk::{AElfClient, AElfError, Provider};
+use async_trait::async_trait;
+use http::Method;
+use serde_json::Value;
+
+#[derive(Clone)]
+struct HostProvider;
+
+#[async_trait]
+impl Provider for HostProvider {
+    async fn request_json(
+        &self,
+        _method: Method,
+        _path: &str,
+        _query: &[(&str, String)],
+        _body: Option<Value>,
+    ) -> Result<Value, AElfError> {
+        Err(AElfError::request("host transport not wired", None))
+    }
+
+    async fn request_text(
+        &self,
+        _method: Method,
+        _path: &str,
+        _query: &[(&str, String)],
+        _body: Option<Value>,
+    ) -> Result<String, AElfError> {
+        Err(AElfError::request("host transport not wired", None))
+    }
+}
+
+let client = AElfClient::with_provider(HostProvider)?;
+# let _ = client;
+```
+
+Notes:
+
+- The SDK does not own Portkey / IronClaw `walletExport` or workspace-memory contracts.
+- Host runtimes should keep their own HTTP bindings and wallet storage layers, and delegate chain protocol logic to `aelf-sdk`.
+- Browser `wasm32-unknown-unknown` remains out of scope for this alpha line.
 
 ## Transport Behavior
 
@@ -245,7 +307,9 @@ let no_retry = AElfClient::new(
 # let _ = (client, no_retry);
 ```
 
-Dynamic contract descriptors are cached in-memory using a `64`-entry LRU cache to avoid unbounded growth in long-running services.
+`send_transaction` only treats DTO payloads or transaction-id-shaped strings as success. Non-empty text such as `"ok"` or proxy error bodies are rejected as unexpected responses.
+
+`client.contract_at(...)` still fetches a fresh descriptor whenever you create a new dynamic handle. Typed contract wrappers now lazily cache the first descriptor per handle instance and reuse it across subsequent calls and clones, without reintroducing a process-wide ABI cache.
 
 ## Local Node Testing
 
@@ -254,12 +318,23 @@ Compile everything:
 ```bash
 cargo check --workspace
 cargo check --workspace --examples
+cargo check -p aelf-client --target wasm32-wasip2 --no-default-features
+cargo check -p aelf-contract --target wasm32-wasip2 --no-default-features
+cargo check -p aelf-sdk --target wasm32-wasip2 --no-default-features
 ```
 
 Run unit tests:
 
 ```bash
 cargo test --workspace
+```
+
+The default workspace test pass intentionally excludes the ignored live public-node smoke suite so local and CI runs remain deterministic.
+
+Run the public readonly smoke suite:
+
+```bash
+cargo test -p aelf-sdk --test public_readonly_smoke -- --ignored --test-threads=1 --nocapture
 ```
 
 Run ignored local-node integration tests:
@@ -274,6 +349,14 @@ The ignored suite expects:
 - `AELF_PRIVATE_KEY`
 - `AELF_TOKEN_CONTRACT`
 - `AELF_TO_ADDRESS`
+
+Manual funded transaction smoke is available through `.github/workflows/transaction-smoke.yml` and expects these repository secrets:
+
+- `AELF_TRANSACTION_SMOKE_ENDPOINT`
+- `AELF_TRANSACTION_SMOKE_PRIVATE_KEY`
+- `AELF_TRANSACTION_SMOKE_TO_ADDRESS`
+- `AELF_TRANSACTION_SMOKE_TOKEN_CONTRACT` (optional)
+- `AELF_TRANSACTION_SMOKE_AMOUNT` (optional)
 
 ## Public Node Verification
 

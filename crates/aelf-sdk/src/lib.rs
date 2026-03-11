@@ -7,6 +7,9 @@
 
 pub use aelf_client::config::{BasicAuth, ClientConfig, RetryPolicy};
 pub use aelf_client::dto;
+#[cfg(feature = "native-http")]
+pub use aelf_client::provider::HttpProvider;
+pub use aelf_client::provider::Provider;
 pub use aelf_client::{AElfError, KeyPairInfo, TransactionBuilder};
 pub use aelf_contract::{
     AedposContract, ContractError, CrossChainContract, DynamicContract, ElectionContract,
@@ -28,9 +31,20 @@ pub struct AElfClient {
 
 impl AElfClient {
     /// Creates a facade client backed by the default HTTP provider.
+    #[cfg(feature = "native-http")]
     pub fn new(config: ClientConfig) -> Result<Self, AElfError> {
         Ok(Self {
             inner: aelf_client::AElfClient::new(config)?,
+        })
+    }
+
+    /// Creates a facade client from a custom provider implementation.
+    pub fn with_provider<P>(provider: P) -> Result<Self, AElfError>
+    where
+        P: Provider + 'static,
+    {
+        Ok(Self {
+            inner: aelf_client::AElfClient::with_provider(provider)?,
         })
     }
 

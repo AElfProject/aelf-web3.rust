@@ -3,7 +3,7 @@ use aelf_sdk::{decode_address, parse_aelf_address, AElfClient, ClientConfig, Wal
 use prost::Message;
 use tokio::time::{sleep, Duration};
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let endpoint =
         std::env::var("AELF_ENDPOINT").unwrap_or_else(|_| "http://127.0.0.1:8000".to_owned());
