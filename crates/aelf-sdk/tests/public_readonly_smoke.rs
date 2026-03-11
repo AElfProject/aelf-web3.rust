@@ -3,6 +3,7 @@ use aelf_sdk::{address_to_pb, AElfClient, ClientConfig, Wallet};
 use serde_json::json;
 use std::error::Error;
 
+// Public test-only readonly key used by live smoke tests. Never fund it.
 const READONLY_PRIVATE_KEY: &str =
     "0000000000000000000000000000000000000000000000000000000000000001";
 const MAIN_CHAIN_ENDPOINT: &str = "https://aelf-public-node.aelf.io";

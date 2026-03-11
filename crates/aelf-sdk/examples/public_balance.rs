@@ -2,6 +2,7 @@ use aelf_sdk::proto::aelf::Address;
 use aelf_sdk::proto::token::GetBalanceInput;
 use aelf_sdk::{decode_address, format_token_amount, AElfClient, ClientConfig, Wallet};
 
+// Public test-only readonly key for examples and smoke tests. Never fund it.
 const READONLY_PRIVATE_KEY: &str =
     "0000000000000000000000000000000000000000000000000000000000000001";
 

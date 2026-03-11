@@ -40,6 +40,7 @@ use zeroize::Zeroize;
 
 const API_BASE: &str = "api/blockChain";
 const NET_API_BASE: &str = "api/net";
+// Public test-only readonly key used for system contract lookups. Never fund it.
 const READONLY_PRIVATE_KEY: &str =
     "0000000000000000000000000000000000000000000000000000000000000001";
 

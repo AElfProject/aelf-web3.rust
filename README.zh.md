@@ -95,6 +95,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Raw Transaction
 
+下面示例里的私钥是公开的只读测试 key，绝对不要充值或承载资产。
+
 ```rust
 use aelf_sdk::proto::token::TransferInput;
 use aelf_sdk::{AElfClient, ClientConfig, Wallet, decode_address};
@@ -103,6 +105,7 @@ use prost::Message;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = AElfClient::new(ClientConfig::new("http://127.0.0.1:8000"))?;
+    // 公开的只读测试 key，绝对不要充值或承载资产。
     let wallet = Wallet::from_private_key(
         "0000000000000000000000000000000000000000000000000000000000000001",
     )?;
@@ -138,6 +141,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Typed Contracts
 
+下面示例里的私钥是公开的只读测试 key，绝对不要充值或承载资产。
+
 ```rust
 use aelf_sdk::proto::token::GetBalanceInput;
 use aelf_sdk::{AElfClient, ClientConfig, Wallet, address_to_pb};
@@ -145,6 +150,7 @@ use aelf_sdk::{AElfClient, ClientConfig, Wallet, address_to_pb};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = AElfClient::new(ClientConfig::new("http://127.0.0.1:8000"))?;
+    // 公开的只读测试 key，绝对不要充值或承载资产。
     let wallet = Wallet::from_private_key(
         "0000000000000000000000000000000000000000000000000000000000000001",
     )?;
@@ -164,6 +170,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Dynamic Contracts
 
+下面示例里的私钥是公开的只读测试 key，绝对不要充值或承载资产。
+
 ```rust
 use aelf_sdk::{AElfClient, ClientConfig, Wallet};
 use serde_json::json;
@@ -171,6 +179,7 @@ use serde_json::json;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = AElfClient::new(ClientConfig::new("http://127.0.0.1:8000"))?;
+    // 公开的只读测试 key，绝对不要充值或承载资产。
     let wallet = Wallet::from_private_key(
         "0000000000000000000000000000000000000000000000000000000000000001",
     )?;
@@ -213,6 +222,8 @@ cargo run -p aelf-sdk --example raw_transaction_flow
 - `AELF_OWNER_ADDRESS`
 - `AELF_AMOUNT`
 - `AELF_SEND`
+
+如果没有提供 `AELF_PRIVATE_KEY`，`public_balance` 和 `dynamic_contract_get_balance` 会回退到公开的只读测试 key。这个 key 仅用于示例和 smoke test，绝对不要充值或承载资产。
 
 ## Feature Flags
 
@@ -429,6 +440,10 @@ MSRV 说明：
 
 - workspace 的 MSRV 现在是 Rust `1.85`。
 - CI 已用 `cargo +1.85.0 check --workspace --all-targets --all-features --locked` 做硬性门禁。
+
+## 安全
+
+私下披露漏洞的方式见 [SECURITY.md](SECURITY.md)。
 
 ## License
 
