@@ -55,6 +55,12 @@ cargo test -p aelf-sdk --test public_readonly_smoke -- --ignored --test-threads=
 - Keep the documented MSRV at Rust `1.85` and preserve the hard `cargo +1.85.0 check --workspace --all-targets --all-features --locked` CI gate.
 - Preserve the `wasm32-wasip2` compile gates for `aelf-client`, `aelf-contract`, and `aelf-sdk` when changing transport or feature-flag behavior.
 
+## Release Flow
+
+- Push a tag such as `v0.1.0-alpha.1` to trigger the automated release flow.
+- The tag workflow runs release preflight checks first, then publishes the workspace crates in dependency order.
+- If a publish run partially succeeds, rerun the `publish` workflow manually with `packages="aelf-contract,aelf-sdk"`-style inputs and keep `skip_published=true`.
+
 ## Commit Style
 
 Use Conventional Commit / `git-cz` style messages in English and keep the matching emoji prefix used by the repository workflow.

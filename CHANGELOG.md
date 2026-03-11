@@ -28,6 +28,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - The facade crate now exposes the transport abstraction needed by native-wasm skill runtimes
 - `send_transaction` no longer treats arbitrary non-empty text payloads as success
 - typed contract wrappers now lazily reuse the first descriptor per handle, while direct `contract_at(...)` calls still fetch a fresh descriptor for each new handle
+- `ChainStatusDto` now accepts both public-node branch map shapes, preventing readonly smoke failures behind mixed main-chain gateway backends
 
 ## [0.1.0-alpha.0] - 2026-03-10
 
