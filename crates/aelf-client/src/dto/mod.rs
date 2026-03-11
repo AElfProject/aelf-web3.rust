@@ -2,6 +2,7 @@ use aelf_proto::aelf::{ResourceTokenCharged, TransactionFeeCharged};
 use base64::Engine;
 use prost::Message;
 use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::{Map, Value};
 use std::collections::{BTreeMap, HashMap};
 
 /// Chain status returned by the blockchain status endpoint.
@@ -9,9 +10,9 @@ use std::collections::{BTreeMap, HashMap};
 #[serde(rename_all = "PascalCase")]
 pub struct ChainStatusDto {
     pub chain_id: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "block_height_map_as_default")]
     pub branches: HashMap<String, i64>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "block_height_map_as_default")]
     pub not_linked_blocks: HashMap<String, i64>,
     pub longest_chain_height: i64,
     pub longest_chain_hash: String,
@@ -249,6 +250,47 @@ where
     Ok(value.unwrap_or_default())
 }
 
+fn block_height_map_as_default<'de, D>(deserializer: D) -> Result<HashMap<String, i64>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<Map<String, Value>>::deserialize(deserializer)?;
+    let mut result = HashMap::new();
+
+    for (key, value) in value.unwrap_or_default() {
+        match value {
+            Value::Number(number) => {
+                let height = number.as_i64().ok_or_else(|| {
+                    serde::de::Error::custom(format!(
+                        "block height value for '{key}' is not a signed integer"
+                    ))
+                })?;
+                result.insert(key, height);
+            }
+            Value::String(text) => {
+                if let Ok(height) = text.parse::<i64>() {
+                    result.insert(key, height);
+                    continue;
+                }
+
+                let inverted_height = key.parse::<i64>().map_err(|_| {
+                    serde::de::Error::custom(format!(
+                        "invalid block height map entry '{key}': '{text}'"
+                    ))
+                })?;
+                result.insert(text, inverted_height);
+            }
+            other => {
+                return Err(serde::de::Error::custom(format!(
+                    "invalid block height map value for '{key}': {other}"
+                )));
+            }
+        }
+    }
+
+    Ok(result)
+}
+
 /// Merkle path node returned by transaction proof queries.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -326,10 +368,11 @@ pub struct WebAppError {
 
 #[cfg(test)]
 mod tests {
-    use super::{LogEventDto, TransactionResultDto};
+    use super::{ChainStatusDto, LogEventDto, TransactionResultDto};
     use aelf_proto::aelf::{Address, ResourceTokenCharged, TransactionFeeCharged};
     use base64::Engine;
     use prost::Message;
+    use serde_json::json;
 
     #[test]
     fn parses_transaction_fee_logs() {
@@ -373,5 +416,53 @@ mod tests {
         let fees = result.get_transaction_fees();
         assert_eq!(fees.get("ELF"), Some(&12_345));
         assert_eq!(fees.get("CPU"), Some(&999));
+    }
+
+    #[test]
+    fn parses_chain_status_hash_to_height_maps() {
+        let status: ChainStatusDto = serde_json::from_value(json!({
+            "ChainId": "AELF",
+            "Branches": {
+                "abc": 42
+            },
+            "NotLinkedBlocks": null,
+            "LongestChainHeight": 42,
+            "LongestChainHash": "abc",
+            "GenesisBlockHash": "genesis",
+            "GenesisContractAddress": "contract",
+            "LastIrreversibleBlockHash": "lib",
+            "LastIrreversibleBlockHeight": 40,
+            "BestChainHash": "abc",
+            "BestChainHeight": 42
+        }))
+        .expect("chain status");
+
+        assert_eq!(status.branches.get("abc"), Some(&42));
+        assert!(status.not_linked_blocks.is_empty());
+    }
+
+    #[test]
+    fn parses_chain_status_height_to_hash_maps() {
+        let status: ChainStatusDto = serde_json::from_value(json!({
+            "ChainId": "AELF",
+            "Branches": {
+                "42": "abc"
+            },
+            "NotLinkedBlocks": {
+                "7": "def"
+            },
+            "LongestChainHeight": 42,
+            "LongestChainHash": "abc",
+            "GenesisBlockHash": "genesis",
+            "GenesisContractAddress": "contract",
+            "LastIrreversibleBlockHash": "lib",
+            "LastIrreversibleBlockHeight": 40,
+            "BestChainHash": "abc",
+            "BestChainHeight": 42
+        }))
+        .expect("chain status");
+
+        assert_eq!(status.branches.get("abc"), Some(&42));
+        assert_eq!(status.not_linked_blocks.get("def"), Some(&7));
     }
 }
