@@ -1,0 +1,7 @@
+title = "aelf-web3.rust gitleaks config"
+
+[allowlist]
+description = "Public readonly test key used by docs, examples, and smoke tests. Never fund it."
+regexes = [
+  '''(?m)\b0000000000000000000000000000000000000000000000000000000000000001\b''',
+]

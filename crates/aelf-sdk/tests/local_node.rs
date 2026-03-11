@@ -11,6 +11,7 @@ use std::env;
 use std::error::Error;
 use tokio::time::{sleep, Duration};
 
+// Public test-only readonly key used by readonly local-node helpers. Never fund it.
 const READONLY_PRIVATE_KEY: &str =
     "0000000000000000000000000000000000000000000000000000000000000001";
 

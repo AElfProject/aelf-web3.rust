@@ -719,6 +719,7 @@ mod tests {
         Arc,
     };
 
+    // Public test-only readonly key used by descriptor-related tests. Never fund it.
     const READONLY_PRIVATE_KEY: &str =
         "0000000000000000000000000000000000000000000000000000000000000001";
 

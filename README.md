@@ -95,6 +95,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Raw Transaction
 
+The sample private key below is a public test-only readonly key. Never fund it.
+
 ```rust
 use aelf_sdk::proto::token::TransferInput;
 use aelf_sdk::{AElfClient, ClientConfig, Wallet, decode_address};
@@ -103,6 +105,7 @@ use prost::Message;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = AElfClient::new(ClientConfig::new("http://127.0.0.1:8000"))?;
+    // Public test-only readonly key. Never fund it.
     let wallet = Wallet::from_private_key(
         "0000000000000000000000000000000000000000000000000000000000000001",
     )?;
@@ -138,6 +141,8 @@ Public-node note:
 
 ## Typed Contracts
 
+The sample private key below is a public test-only readonly key. Never fund it.
+
 ```rust
 use aelf_sdk::proto::token::GetBalanceInput;
 use aelf_sdk::{AElfClient, ClientConfig, Wallet, address_to_pb};
@@ -145,6 +150,7 @@ use aelf_sdk::{AElfClient, ClientConfig, Wallet, address_to_pb};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = AElfClient::new(ClientConfig::new("http://127.0.0.1:8000"))?;
+    // Public test-only readonly key. Never fund it.
     let wallet = Wallet::from_private_key(
         "0000000000000000000000000000000000000000000000000000000000000001",
     )?;
@@ -164,6 +170,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Dynamic Contracts
 
+The sample private key below is a public test-only readonly key. Never fund it.
+
 ```rust
 use aelf_sdk::{AElfClient, ClientConfig, Wallet};
 use serde_json::json;
@@ -171,6 +179,7 @@ use serde_json::json;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = AElfClient::new(ClientConfig::new("http://127.0.0.1:8000"))?;
+    // Public test-only readonly key. Never fund it.
     let wallet = Wallet::from_private_key(
         "0000000000000000000000000000000000000000000000000000000000000001",
     )?;
@@ -213,6 +222,8 @@ Useful environment variables:
 - `AELF_OWNER_ADDRESS`
 - `AELF_AMOUNT`
 - `AELF_SEND`
+
+`public_balance` and `dynamic_contract_get_balance` fall back to a public test-only readonly key when `AELF_PRIVATE_KEY` is omitted. Never fund it.
 
 ## Feature Flags
 
@@ -429,6 +440,10 @@ MSRV:
 
 - The workspace MSRV is Rust `1.85`.
 - CI enforces it with `cargo +1.85.0 check --workspace --all-targets --all-features --locked`.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for private vulnerability disclosure instructions.
 
 ## License
 
